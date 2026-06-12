@@ -1,4 +1,4 @@
-let rmaBuilder = new Reef('#rma-builder', {
+var rmaBuilder = new Reef('#rma-builder', {
     data: {
         title: 'Script builder',
         actions: [],

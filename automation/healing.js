@@ -1,6 +1,8 @@
 let currentHealthPercentage;
 
 setInterval(() => {
+    if (!skills || !skills[0] || !skills[0].health) return;
+
     currentHealthPercentage = skills[0].health.current / skills[0].health.level * 100;
 
     if (currentHealthPercentage <= RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD && players[0].temp.target_id === -1) {

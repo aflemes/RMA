@@ -1,13 +1,10 @@
-// Click on the Fight automation button in the menu
-const refreshSeedsButton = document.querySelector('#automation #farming .refresh');
-refreshSeedsButton.addEventListener('click', (e) => {
-    // Find all seeds we have in our chest, with the count
+document.getElementById('rma').addEventListener('click', (e) => {
+    if (!e.target.closest('#farming .refresh')) return;
     const allSeeds = item_base.filter(item => item.name.includes('Seed'));
     const seedsInChest = allSeeds.map(seed => seed.b_i).filter(seedId => Chest.player_chest_item_count(0, seedId)).map(seedId => ({
         seed: item_base[seedId],
         count: Chest.player_chest_item_count(0, seedId)
     }));
-
     buildSeedsList(seedsInChest);
 });
 

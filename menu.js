@@ -10,6 +10,13 @@ let rma = new Reef('#rma', {
                         <div class="sub-section">Fight</div>
                         <div id="enemies"></div>
                         <button class="start">Refresh ennemies</button>
+                        <div class="fight-delay-config">
+                            <div class="delay-label">Delay between kills (ms)</div>
+                            <div class="flex gap-10">
+                                <input id="fight-delay-min" type="number" min="0" step="100" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.FIGHT_DELAY_MIN : 300}" placeholder="Min" />
+                                <input id="fight-delay-max" type="number" min="0" step="100" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.FIGHT_DELAY_MAX : 1200}" placeholder="Max" />
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -28,6 +35,63 @@ let rma = new Reef('#rma', {
  */
 
 rma.render();
+
+// Toggle panel collapsed/expanded
+document.getElementById('rma-header').addEventListener('click', (e) => {
+    if (e.target.closest('#rma-header')._wasDragging) return;
+    const container = document.getElementById('rma-container');
+    const isCollapsed = container.classList.contains('collapsed');
+    container.classList.toggle('collapsed', !isCollapsed);
+    container.classList.toggle('expanded', isCollapsed);
+});
+
+// Draggable panel
+(function () {
+    const container = document.getElementById('rma-container');
+    const header = document.getElementById('rma-header');
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+
+    header.addEventListener('mousedown', (e) => {
+        // Only drag on left click
+        if (e.button !== 0) return;
+        isDragging = true;
+        header._wasDragging = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = container.getBoundingClientRect();
+        startLeft = rect.left;
+        startTop = rect.top;
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            header._wasDragging = true;
+        }
+        container.style.left = `${startLeft + dx}px`;
+        container.style.top = `${startTop + dy}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+})();
+
+// Delay config inputs — event delegation since Reef re-renders content
+document.getElementById('rma').addEventListener('change', (e) => {
+    if (e.target.id === 'fight-delay-min') {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val) && val >= 0) RMA_CONFIG.FIGHT_DELAY_MIN = val;
+    }
+    if (e.target.id === 'fight-delay-max') {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val) && val >= 0) RMA_CONFIG.FIGHT_DELAY_MAX = val;
+    }
+});
 
 const addTextToScript = (text, newLine = true) => {
     const scriptElement = document.getElementById("builder-script");
@@ -55,6 +119,7 @@ const addOrReplaceSelection = (newText, newLine = true) => {
 }
 
 const clickHandler = async function (event) {
+    if (!rmaBuilder) return;
     var action = event.target.getAttribute('data-rma-action');
     
     if (event.target.id === "hud" && rmaBuilder.data.state === STATE_BUILDER_TARGETING) {

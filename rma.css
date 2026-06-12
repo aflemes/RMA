@@ -60,12 +60,142 @@ button.with-horizontal-margin {
     box-shadow: 0px 4px 12px 0px rgb(0 0 0 / 20%);
     font-family: sans-serif;
     overflow-y: scroll;
-    position: fixed;
     max-height: calc(100% - 8%);
 }
 
-#rma-container:hover {
+#rma-container.collapsed {
+    z-index: 1;
+    overflow: hidden;
+}
+
+#rma-container.collapsed #rma {
+    display: none;
+}
+
+#rma-container.expanded {
     z-index: 9999;
+}
+
+#rma-header {
+    cursor: grab;
+    user-select: none;
+}
+
+#rma-header:active {
+    cursor: grabbing;
+}
+
+#rma-toggle {
+    background: none;
+    border: none;
+    color: #c3d7ac;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 4px;
+    width: auto;
+    letter-spacing: 0;
+    text-transform: none;
+    line-height: 1;
+    transition: transform 0.2s;
+}
+
+#rma-container.collapsed #rma-toggle {
+    transform: rotate(-90deg);
+}
+
+#rma-settings-btn {
+    background: none;
+    border: none;
+    color: #c3d7ac;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+    width: auto;
+    letter-spacing: 0;
+    text-transform: none;
+    line-height: 1;
+    margin-left: 6px;
+    transition: transform 0.4s;
+}
+
+#rma-settings-btn:hover {
+    transform: rotate(60deg);
+    color: #e8f5d8;
+}
+
+/* Settings panel */
+#rma-settings-panel {
+    padding: 4px 0;
+}
+
+.settings-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.settings-label {
+    color: #c0c0c0;
+    font-size: 13px;
+    flex: 1;
+    padding-right: 12px;
+}
+
+.settings-group input[type="number"] {
+    width: 70px;
+    padding: 5px 8px;
+    background: #2e2e2e;
+    border: 1px solid #565656;
+    border-radius: 2px;
+    color: #efefef;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+/* Toggle switch */
+.rma-toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.rma-toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.rma-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #444;
+    border-radius: 22px;
+    transition: 0.2s;
+}
+
+.rma-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background: #aaa;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+
+.rma-toggle-switch input:checked + .rma-toggle-slider {
+    background: #4a8a5c;
+}
+
+.rma-toggle-switch input:checked + .rma-toggle-slider:before {
+    transform: translateX(18px);
+    background: #b6c9a9;
 }
 
 #rma-logo {
@@ -109,6 +239,27 @@ button.with-horizontal-margin {
 *    Fighting
 * ==============
 */
+
+.fight-delay-config {
+    margin-top: 10px;
+}
+
+.delay-label {
+    color: #a0a0a0;
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+
+.fight-delay-config input[type="number"] {
+    width: 100%;
+    padding: 6px 8px;
+    background: #2e2e2e;
+    border: 1px solid #565656;
+    border-radius: 2px;
+    color: #efefef;
+    font-size: 13px;
+    box-sizing: border-box;
+}
 
 .enemyCard {
     padding: 10px;
