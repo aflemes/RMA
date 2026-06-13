@@ -1,14 +1,41 @@
 const rmaLog = (...args) => { if (RMA_CONFIG.LOGS_ENABLED) console.log(...args); };
 
+const FOOD_ITEMS = {
+    "Frog": 3, "Perch": 3, "Cooked Baby Squid": 4, "Trout": 4,
+    "Sardine": 5, "Jellyfish": 5, "Pike": 6, "Blue Marine Fish": 7,
+    "Salmon": 8, "Sand Crab": 8, "Lion Fish": 9, "Mud Crab": 9,
+    "Pearl Clam": 10, "Bass": 10, "Seahorse": 10, "Angelfish": 11,
+    "Common Starfish": 11, "Red Star": 12, "Lobster": 12, "Eel": 12,
+    "Swordfish": 13, "Squalidae": 14, "Rock Squid": 14, "Dolphin": 15,
+    "Manta Ray": 15, "White Shark": 16, "King Crab": 16, "Giant Squid": 16,
+    "Cowfish": 16, "Hammer Shark": 17, "Reef Manta Ray": 18, "Gray Shark": 19,
+    "Cooked Deep Sea Octopus": 19, "Cooked Spiny Sea Star": 20, "King Seahorse": 22,
+    "Giant Catfish": 23, "Baby Whale": 24, "Whale Shark": 25,
+    "Cooked Blue Marlin": 26, "Sunfish": 28, "Tomato": 2, "Rat Meat": 2,
+    "Chicken Leg": 2, "Onion": 2, "Ham": 3, "Potato": 3, "Corn": 4,
+    "Apple": 6, "Banana": 8, "Carrot": 8, "Pineapple": 10, "Strawberry": 13
+};
+
 // Use event delegation on #rma so the listener survives Reef re-renders
 document.getElementById('rma').addEventListener('click', (e) => {
-    if (!e.target.closest('#fight .start')) return;
-    const reachableTargets = findReachableObjects((obj) => obj?.activities.includes("Attack"));
-    const uniqueEnemies = reachableTargets.reduce((acc, target) => {
-        if (!acc.some(t => t.name === target.name)) acc.push(target);
-        return acc;
-    }, []);
-    buildReachableEnnemiesList(uniqueEnemies);
+    if (e.target.closest('#fight .start')) {
+        const reachableTargets = findReachableObjects((obj) => obj?.activities.includes("Attack"));
+        const uniqueEnemies = reachableTargets.reduce((acc, target) => {
+            if (!acc.some(t => t.name === target.name)) acc.push(target);
+            return acc;
+        }, []);
+        buildReachableEnnemiesList(uniqueEnemies);
+    }
+    if (e.target.closest('.nearby-toggle')) {
+        state.nearbyMode = !state.nearbyMode;
+        if (state.nearbyMode) {
+            state.target = null;
+            rmaLog('[RMA Fight] Nearby mode ON — will auto-target closest enemy');
+        } else {
+            rmaLog('[RMA Fight] Nearby mode OFF');
+        }
+        e.target.closest('.nearby-toggle').classList.toggle('active', state.nearbyMode);
+    }
 });
 
 const buildReachableEnnemiesList = (uniqueEnemies) => {
@@ -26,6 +53,11 @@ const buildReachableEnnemiesList = (uniqueEnemies) => {
                 state.target = null;
                 newCard.classList.remove('active');
             } else {
+                if (state.nearbyMode) {
+                    state.nearbyMode = false;
+                    const nearbyBtn = document.querySelector('.nearby-toggle');
+                    if (nearbyBtn) nearbyBtn.classList.remove('active');
+                }
                 state.target = enemy;
                 newCard.classList.add('active');
             }
@@ -102,8 +134,17 @@ const getTargetEntity = () => {
 setInterval(async () => {
     rmaLog('[RMADBG] === TICK START ===');
     if (fightLoopRunning) { rmaLog('[RMADBG] GATE: fightLoopRunning'); return; };
-    if (!state.target) { rmaLog('[RMADBG] GATE: !state.target'); return; };
     if (currentHealthPercentage <= RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD) { rmaLog('[RMADBG] GATE: health too low'); return; };
+
+    // Nearby mode: auto-find closest enemy when no target
+    if (!state.target) {
+        if (!state.nearbyMode) { rmaLog('[RMADBG] GATE: !state.target'); return; };
+        const nearest = findClosestReachableObject(obj => obj?.activities.includes("Attack"));
+        if (!nearest.item) { rmaLog('[RMADBG] GATE: no enemies nearby'); return; };
+        state.target = nearest.item;
+        combatEndTime = 0;
+        rmaLog('[RMA Fight] Nearby mode: targeting', state.target.name);
+    }
 
     const tid = players[0].temp.target_id;
     const animating = players[0].temp.animate_until > Date.now();
@@ -128,8 +169,17 @@ setInterval(async () => {
         '| combatEndTime=' + (combatEndTime > 0 ? (Date.now() - combatEndTime) + 'ms ago' : '0')
     );
 
-    // === Delay between kills ===
+    // === Delay between kills / post-combat healing ===
     if (combatEndTime > 0) {
+        const foodThreshold = RMA_CONFIG.FOOD_HEAL_THRESHOLD || 0;
+        if (foodThreshold > 0 && currentHealthPercentage < foodThreshold) {
+            rmaLog('[RMADBG] Health ' + currentHealthPercentage + '% < ' + foodThreshold + '% — eating food');
+            if (typeof Player !== 'undefined' && Player.eat_food) {
+                Player.eat_food();
+            }
+            rmaLog('[RMADBG] === TICK END (healing) ===');
+            return;
+        }
         const sinceKill = Date.now() - combatEndTime;
         if (sinceKill < killDelay) {
             rmaLog('[RMADBG] Kill cooldown: ' + sinceKill + 'ms < ' + killDelay + 'ms — waiting');
@@ -207,8 +257,19 @@ setInterval(async () => {
     } else {
         rmaLog('[RMADBG] BRANCH: tid === -1');
         if (combatAnimationSeen) {
-            rmaLog('[RMADBG] Combat just ended — setting kill cooldown');
+            rmaLog('[RMADBG] Combat just ended');
             combatEndTime = Date.now();
+            const foodThreshold = RMA_CONFIG.FOOD_HEAL_THRESHOLD || 0;
+            if (foodThreshold > 0 && currentHealthPercentage < foodThreshold) {
+                rmaLog('[RMA Fight] Health ' + currentHealthPercentage + '% < ' + foodThreshold + '% — eating food');
+                if (typeof Player !== 'undefined' && Player.eat_food) {
+                    Player.eat_food();
+                }
+            }
+            if (state.nearbyMode) {
+                state.target = null;
+                rmaLog('[RMADBG] Nearby mode: cleared target for next enemy');
+            }
         }
         combatAnimationSeen = false;
         lastAttackDispatchTime = 0;

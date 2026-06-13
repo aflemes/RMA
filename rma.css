@@ -316,6 +316,31 @@ button.with-horizontal-margin {
     border: 1px solid #c6cda1;
 }
 
+.nearby-toggle {
+    margin-top: 8px;
+}
+
+.nearby-toggle.active {
+    background: #4a8a5c;
+    border-color: #b6c9a9;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.3);
+}
+
+.heal-config {
+    margin-top: 10px;
+}
+
+.heal-config input[type="number"] {
+    width: 100%;
+    padding: 6px 8px;
+    background: #2e2e2e;
+    border: 1px solid #565656;
+    border-radius: 2px;
+    color: #efefef;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
 /**
 * =============
 *    FARMING

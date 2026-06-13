@@ -17,12 +17,10 @@ let rma = new Reef('#rma', {
                             <div class="sub-section">Fight</div>
                             <div id="enemies"></div>
                             <button class="start">Refresh ennemies</button>
-                            <div class="fight-delay-config">
-                                <div class="delay-label">Pre-attack delay (ms)</div>
-                                <div class="flex gap-10">
-                                    <input id="fight-delay-min" type="number" min="0" step="100" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.FIGHT_DELAY_MIN : 300}" placeholder="Min" />
-                                    <input id="fight-delay-max" type="number" min="0" step="100" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.FIGHT_DELAY_MAX : 1200}" placeholder="Max" />
-                                </div>
+                            <button class="nearby-toggle ${typeof state !== 'undefined' && state.nearbyMode ? 'active' : ''}">NEARBY ENNEMIES</button>
+                            <div class="heal-config">
+                                <div class="delay-label">Auto heal after combat when life under %</div>
+                                <input type="number" id="food-heal-threshold" min="0" max="100" step="5" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.FOOD_HEAL_THRESHOLD : 60}" />
                             </div>
                         </div>
                     </div>
@@ -36,6 +34,14 @@ let rma = new Reef('#rma', {
                     <div class="sub-section">Settings</div>
                     <div id="rma-settings-panel">
                         <div class="settings-group">
+                            <span class="settings-label">Pre-attack delay min (ms)</span>
+                            <input type="number" id="fight-delay-min" min="0" step="100" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.FIGHT_DELAY_MIN : 300}" />
+                        </div>
+                        <div class="settings-group">
+                            <span class="settings-label">Pre-attack delay max (ms)</span>
+                            <input type="number" id="fight-delay-max" min="0" step="100" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.FIGHT_DELAY_MAX : 1200}" />
+                        </div>
+                        <div class="settings-group">
                             <span class="settings-label">Attack retry interval (ms)</span>
                             <input type="number" id="rma-attack-retry-interval" min="1000" step="500" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.ATTACK_RETRY_INTERVAL : 5000}" />
                         </div>
@@ -44,8 +50,8 @@ let rma = new Reef('#rma', {
                             <input type="number" id="rma-delay-between-kills" min="0" step="100" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.DELAY_BETWEEN_KILLS : 1000}" />
                         </div>
                         <div class="settings-group">
-                            <span class="settings-label">Stop fight when life under %</span>
-                            <input type="number" id="rma-min-health" min="0" max="100" step="5" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD : 85}" />
+                            <span class="settings-label">Stop fight when life under % (0 = disabled)</span>
+                            <input type="number" id="rma-min-health" min="0" max="100" step="5" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD : 0}" />
                         </div>
                         <div class="settings-group">
                             <span class="settings-label">Enable logs</span>
@@ -150,6 +156,10 @@ document.getElementById('rma').addEventListener('change', (e) => {
     if (e.target.id === 'rma-delay-between-kills') {
         const val = parseInt(e.target.value, 10);
         if (!isNaN(val) && val >= 0) RMA_CONFIG.DELAY_BETWEEN_KILLS = val;
+    }
+    if (e.target.id === 'food-heal-threshold') {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val) && val >= 0 && val <= 100) RMA_CONFIG.FOOD_HEAL_THRESHOLD = val;
     }
     if (e.target.id === 'rma-min-health') {
         const val = parseInt(e.target.value, 10);

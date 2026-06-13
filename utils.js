@@ -3,12 +3,13 @@
  */
 
 const RMA_CONFIG = {
-    MIN_HEALTH_HEALING_THRESHOLD: 85,
+    MIN_HEALTH_HEALING_THRESHOLD: 0,
     FIGHT_DELAY_MIN: 300,
     FIGHT_DELAY_MAX: 1200,
-    LOGS_ENABLED: true,
+    LOGS_ENABLED: false,
     ATTACK_RETRY_INTERVAL: 5000,
     DELAY_BETWEEN_KILLS: 1000,
+    FOOD_HEAL_THRESHOLD: 60,
 };
 
 const STATE_BUILDER_RUNNING = 'STATE_BUILDER_RUNNING';
@@ -26,6 +27,7 @@ const DEFAULT_FARMING_STATE = {
 
 let state = {
     target: null,
+    nearbyMode: false,
     farming: { ...DEFAULT_FARMING_STATE }
 };
 
