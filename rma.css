@@ -198,6 +198,46 @@ button.with-horizontal-margin {
     background: #b6c9a9;
 }
 
+/* Tab bar */
+#rma-tab-bar {
+    border-bottom: 1px solid #3a3a3a;
+    margin-bottom: 10px;
+    margin-top: 4px;
+    gap: 2px;
+}
+
+.rma-tab {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    padding: 6px 12px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    width: auto;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-bottom-color 0.2s;
+    border-radius: 0;
+}
+
+.rma-tab:hover {
+    color: #c3d7ac;
+}
+
+.rma-tab.active {
+    color: #c3d7ac;
+    border-bottom-color: #c3d7ac;
+}
+
+.rma-tab-content {
+    display: none;
+}
+
+.rma-tab-content.active {
+    display: block;
+}
+
 #rma-logo {
     width: 150px;
 }
