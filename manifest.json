@@ -42,6 +42,7 @@
                 "automation/healing.js", 
                 "automation/fight.js",
                 "automation/farming.js",
+                "automation/inventory.js",
                 "menu.html", 
                 "captcha-notifier.js", 
                 "img/notification.png",

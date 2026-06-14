@@ -320,6 +320,17 @@ button.with-horizontal-margin {
     margin-top: 8px;
 }
 
+.drops-btn {
+    background: #4a5a6a !important;
+    border-color: #7a8a9a !important;
+    border-radius: 2px !important;
+    cursor: pointer !important;
+}
+
+.drops-btn:hover {
+    background: #5a6a7a !important;
+}
+
 .nearby-toggle.active {
     background: #4a8a5c;
     border-color: #b6c9a9;
@@ -339,6 +350,139 @@ button.with-horizontal-margin {
     color: #efefef;
     font-size: 13px;
     box-sizing: border-box;
+}
+
+/* Inventory */
+.inventory-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    background: #363636;
+    border: 1px solid #4b4b4b;
+    color: #d1d1d1;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.inventory-item:hover {
+    background: #404040;
+}
+
+.inventory-item.marked {
+    border-color: #c6cda1;
+    background: #3d4236;
+}
+
+.inventory-item .inv-item-check {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #666;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+    font-size: 12px;
+    color: transparent;
+    flex-shrink: 0;
+}
+
+.inventory-item.marked .inv-item-check {
+    border-color: #8a9a6a;
+    background: #5a7a3a;
+    color: #d4e8b0;
+}
+
+.inventory-item .inv-item-name {
+    flex: 1;
+    font-size: 13px;
+}
+
+.inventory-item .inv-item-count {
+    color: #a0a0a0;
+    font-size: 12px;
+    margin-left: 8px;
+}
+
+#loot-drops-list {
+    max-height: 360px;
+    overflow-y: auto;
+    margin-top: 8px;
+}
+
+#loot-drops-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+#loot-drops-list::-webkit-scrollbar-track {
+    background: #2e2e2e;
+    border-radius: 4px;
+}
+
+#loot-drops-list::-webkit-scrollbar-thumb {
+    background: #5a5a5a;
+    border-radius: 4px;
+}
+
+#loot-drops-list::-webkit-scrollbar-thumb:hover {
+    background: #7a7a7a;
+}
+
+.loot-desc {
+    color: #b0b0b0;
+    font-size: 12px;
+    padding: 6px 8px 10px;
+    line-height: 1.4;
+    border-bottom: 1px solid #3a3a3a;
+    margin-bottom: 8px;
+}
+
+.loot-desc-marked {
+    color: #b6c9a9;
+    font-weight: bold;
+}
+
+.loot-empty {
+    color: #888;
+    font-size: 13px;
+    padding: 10px 0;
+}
+
+.inventory-item .inv-item-chance {
+    color: #a0a0a0;
+    font-size: 11px;
+    margin-left: 8px;
+    min-width: 40px;
+    text-align: right;
+}
+
+.inventory-item.drop-rare {
+    border-color: #cda144;
+    background: #3d3626;
+}
+
+.inventory-item.drop-rare .inv-item-name {
+    color: #f0d080;
+}
+
+.inventory-item.drop-uncommon {
+    border-color: #6a9acd;
+    background: #26363d;
+}
+
+.inventory-item.drop-uncommon .inv-item-name {
+    color: #80b0f0;
+}
+
+.inventory-item.drop-common {
+    border-color: #6acd6a;
+    background: #263d26;
+}
+
+.inventory-item.drop-common .inv-item-name {
+    color: #80f080;
 }
 
 /**

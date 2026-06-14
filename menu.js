@@ -7,6 +7,7 @@ let rma = new Reef('#rma', {
             <div id="rma-menu">
                 <div id="rma-tab-bar" class="flex">
                     <button class="rma-tab active" data-tab="fight">Fight</button>
+                    <button class="rma-tab" data-tab="drops">Drops</button>
                     <button class="rma-tab" data-tab="builder">Builder</button>
                     <button class="rma-tab" data-tab="settings">&#9881;</button>
                 </div>
@@ -28,6 +29,24 @@ let rma = new Reef('#rma', {
 
                 <div data-tab-content="builder" class="rma-tab-content">
                     <div id="rma-builder"></div>
+                </div>
+
+                <div data-tab-content="drops" class="rma-tab-content">
+                    <div id="loot-drops-manager">
+                        <div class="sub-section">Drops — click Drops on a monster in FIGHT</div>
+                        <div id="loot-drops-list"></div>
+                        <div class="settings-group" style="margin-top:12px;">
+                            <span class="settings-label">Auto-destroy while fighting</span>
+                            <label class="rma-toggle-switch">
+                                <input type="checkbox" id="auto-destroy-enabled" ${typeof RMA_CONFIG !== 'undefined' && RMA_CONFIG.AUTO_DESTROY_ENABLED ? 'checked' : ''} />
+                                <span class="rma-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-group">
+                            <span class="settings-label">Destroy interval (s)</span>
+                            <input type="number" id="auto-destroy-interval" min="10" step="5" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.AUTO_DESTROY_INTERVAL : 60}" />
+                        </div>
+                    </div>
                 </div>
 
                 <div data-tab-content="settings" class="rma-tab-content">
@@ -53,6 +72,11 @@ let rma = new Reef('#rma', {
                             <span class="settings-label">Stop fight when life under % (0 = disabled)</span>
                             <input type="number" id="rma-min-health" min="0" max="100" step="5" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD : 0}" />
                         </div>
+                        <div class="settings-group">
+                            <span class="settings-label">Fight tick interval (ms)</span>
+                            <input type="number" id="rma-fight-tick-interval" min="200" step="100" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.FIGHT_TICK_INTERVAL : 1000}" />
+                        </div>
+                        
                         <div class="settings-group">
                             <span class="settings-label">Enable logs</span>
                             <label class="rma-toggle-switch">
@@ -165,8 +189,26 @@ document.getElementById('rma').addEventListener('change', (e) => {
         const val = parseInt(e.target.value, 10);
         if (!isNaN(val) && val >= 0 && val <= 100) RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD = val;
     }
+    if (e.target.id === 'rma-fight-tick-interval') {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val) && val >= 200) {
+            RMA_CONFIG.FIGHT_TICK_INTERVAL = val;
+            if (typeof window.scheduleNextFightTick === 'function') window.scheduleNextFightTick();
+        }
+    }
     if (e.target.id === 'rma-logs-enabled') {
         RMA_CONFIG.LOGS_ENABLED = e.target.checked;
+    }
+    if (e.target.id === 'auto-destroy-enabled') {
+        RMA_CONFIG.AUTO_DESTROY_ENABLED = e.target.checked;
+        if (typeof window.scheduleNextAutoDestroy === 'function') window.scheduleNextAutoDestroy();
+    }
+    if (e.target.id === 'auto-destroy-interval') {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val) && val >= 10) {
+            RMA_CONFIG.AUTO_DESTROY_INTERVAL = val;
+            if (typeof window.scheduleNextAutoDestroy === 'function') window.scheduleNextAutoDestroy();
+        }
     }
 });
 

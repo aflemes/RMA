@@ -14,7 +14,8 @@ fetch(chrome.runtime.getURL('/menu.html')).then(r => r.text()).then(html => {
         "captcha-notifier.js",
         "automation/healing.js", 
         "automation/fight.js", 
-        "automation/farming.js"
+        "automation/farming.js",
+        "automation/inventory.js"
     ];
 
     // Load scripts sequentially so each one finishes before the next starts.

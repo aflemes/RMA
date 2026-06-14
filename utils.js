@@ -10,6 +10,9 @@ const RMA_CONFIG = {
     ATTACK_RETRY_INTERVAL: 5000,
     DELAY_BETWEEN_KILLS: 1000,
     FOOD_HEAL_THRESHOLD: 60,
+    AUTO_DESTROY_ENABLED: false,
+    AUTO_DESTROY_INTERVAL: 60,
+    FIGHT_TICK_INTERVAL: 1000,
 };
 
 const STATE_BUILDER_RUNNING = 'STATE_BUILDER_RUNNING';
@@ -119,7 +122,8 @@ const findReachableObjects = (filterCallback = (obj) => obj.activities && obj.ac
 
     for (var i = 0; map_size_x > i; i++) for (var j = 0; map_size_y > j; j++) {
         if (on_map[current_map][i] && on_map[current_map][i][j]) {
-            var obj = objects_data[on_map[current_map][i][j].id];
+            var tileId = on_map[current_map][i][j].id;
+            var obj = objects_data[tileId];
             if (!obj) {
                 continue;
             }
@@ -131,7 +135,7 @@ const findReachableObjects = (filterCallback = (obj) => obj.activities && obj.ac
             }
 
             if (filterCallback(obj)) {
-                reachables.push(obj);
+                reachables.push({ ...obj, _mobId: tileId });
             }
         }
     }

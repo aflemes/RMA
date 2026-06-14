@@ -46,9 +46,10 @@ const buildReachableEnnemiesList = (uniqueEnemies) => {
     for (const enemy of uniqueEnemies) {
         const newCard = document.createElement('div');
         newCard.classList.add('enemyCard');
-        newCard.innerHTML = `<div class="name">${enemy.name}</div>`;
+        newCard.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;"><span class="name">${enemy.name}</span><button class="drops-btn" style="width:auto;padding:2px 8px;font-size:11px;">Drops</button></div>`;
 
         newCard.addEventListener('click', (e) => {
+            if (e.target.closest('.drops-btn')) return;
             if (newCard.classList.contains('active')) {
                 state.target = null;
                 newCard.classList.remove('active');
@@ -60,6 +61,29 @@ const buildReachableEnnemiesList = (uniqueEnemies) => {
                 }
                 state.target = enemy;
                 newCard.classList.add('active');
+            }
+        });
+
+        newCard.querySelector('.drops-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const drops = enemy.params && enemy.params.drops;
+            if (drops && drops.length > 0) {
+                rmaLog('[RMA Fight] Loading', drops.length, 'drops from', enemy.name);
+                rmaDropIds.clear();
+                rmaKeepIds.clear();
+                rmaDropChances.clear();
+                for (const drop of drops) {
+                    if (drop.id) {
+                        rmaDropIds.add(drop.id);
+                        rmaKeepIds.add(drop.id);
+                        rmaDropChances.set(drop.id, drop.chance ?? 0);
+                    }
+                }
+                if (typeof window.refreshLootDropsList === 'function') window.refreshLootDropsList();
+                const tabBtn = document.querySelector('.rma-tab[data-tab="drops"]');
+                if (tabBtn) tabBtn.click();
+            } else {
+                rmaLog('[RMA Fight] No drops found for', enemy.name);
             }
         });
 
@@ -91,8 +115,19 @@ const executeAttack = async () => {
         '| still moving =', movementInProgress(players[0]),
         '| set_target timer =', Timers.running("set_target"));
 
+    if (!moved) {
+        rmaLog('[RMA Fight] executeAttack: movement did not settle — target too far, aborting');
+        return false;
+    }
+
     if (!state.target) {
         rmaLog('[RMA Fight] executeAttack: target was cleared during movement, aborting');
+        return false;
+    }
+
+    const dist = Math.abs(players[0].i - closestTarget.i) + Math.abs(players[0].j - closestTarget.j);
+    if (dist > 2) {
+        rmaLog('[RMA Fight] executeAttack: target too far (dist=' + dist + '), aborting');
         return false;
     }
 
@@ -121,6 +156,7 @@ let combatAnimationSeen = false;
 let combatDomWaitStart = 0;
 let combatEndTime = 0;
 const STUCK_TIMEOUT = 3000;
+let fightTickTimer = null;
 
 const getTargetEntity = () => {
     const tid = players[0].temp.target_id;
@@ -131,16 +167,16 @@ const getTargetEntity = () => {
     return null;
 };
 
-setInterval(async () => {
+const fightTick = async () => {
     rmaLog('[RMADBG] === TICK START ===');
-    if (fightLoopRunning) { rmaLog('[RMADBG] GATE: fightLoopRunning'); return; };
-    if (currentHealthPercentage <= RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD) { rmaLog('[RMADBG] GATE: health too low'); return; };
+    if (fightLoopRunning) { rmaLog('[RMADBG] GATE: fightLoopRunning'); scheduleNextFightTick(); return; };
+    if (currentHealthPercentage <= RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD) { rmaLog('[RMADBG] GATE: health too low'); scheduleNextFightTick(); return; };
 
     // Nearby mode: auto-find closest enemy when no target
     if (!state.target) {
-        if (!state.nearbyMode) { rmaLog('[RMADBG] GATE: !state.target'); return; };
+        if (!state.nearbyMode) { rmaLog('[RMADBG] GATE: !state.target'); scheduleNextFightTick(); return; };
         const nearest = findClosestReachableObject(obj => obj?.activities.includes("Attack"));
-        if (!nearest.item) { rmaLog('[RMADBG] GATE: no enemies nearby'); return; };
+        if (!nearest.item) { rmaLog('[RMADBG] GATE: no enemies nearby'); scheduleNextFightTick(); return; };
         state.target = nearest.item;
         combatEndTime = 0;
         rmaLog('[RMA Fight] Nearby mode: targeting', state.target.name);
@@ -164,6 +200,7 @@ setInterval(async () => {
         '| enemyHb=' + (domEl ? 'visible' : 'hidden/missing'),
         '| moving=' + moving,
         '| setTarget=' + setTargetRunning,
+        '| tickInterval=' + (RMA_CONFIG.FIGHT_TICK_INTERVAL || 1000),
         '| retryInterval=' + retryInterval,
         '| killDelay=' + killDelay,
         '| combatEndTime=' + (combatEndTime > 0 ? (Date.now() - combatEndTime) + 'ms ago' : '0')
@@ -178,16 +215,24 @@ setInterval(async () => {
                 Player.eat_food();
             }
             rmaLog('[RMADBG] === TICK END (healing) ===');
+            scheduleNextFightTick();
             return;
         }
         const sinceKill = Date.now() - combatEndTime;
         if (sinceKill < killDelay) {
             rmaLog('[RMADBG] Kill cooldown: ' + sinceKill + 'ms < ' + killDelay + 'ms — waiting');
             rmaLog('[RMADBG] === TICK END (kill cooldown) ===');
+            scheduleNextFightTick();
             return;
         }
         rmaLog('[RMADBG] Kill cooldown expired');
         combatEndTime = 0;
+        // If already in combat (tid set, healthbar visible), mark combat as seen
+        if (tid !== -1 || domEl) {
+            rmaLog('[RMADBG] Player already in combat — resuming');
+            combatAnimationSeen = true;
+            lastAttackDispatchTime = 0;
+        }
     }
 
     // === DOM combat confirmation ===
@@ -199,12 +244,14 @@ setInterval(async () => {
             combatAnimationSeen = true;
             lastAttackDispatchTime = 0;
             rmaLog('[RMADBG] === TICK END (DOM confirmed) ===');
+            scheduleNextFightTick();
             return;
         }
         const domElapsed = Date.now() - combatDomWaitStart;
         if (domElapsed < retryInterval) {
             rmaLog('[RMADBG] DOM still waiting, elapsed=' + domElapsed + 'ms < ' + retryInterval + 'ms — returning');
             rmaLog('[RMADBG] === TICK END (DOM wait) ===');
+            scheduleNextFightTick();
             return;
         }
         rmaLog('[RMA Fight] enemy_healthbar not found after ' + domElapsed + 'ms — retrying');
@@ -220,6 +267,7 @@ setInterval(async () => {
             lastAttackDispatchTime = 0;
         }
         rmaLog('[RMADBG] === TICK END (animating) ===');
+        scheduleNextFightTick();
         return;
     }
 
@@ -228,6 +276,7 @@ setInterval(async () => {
         if (combatAnimationSeen) {
             rmaLog('[RMADBG] combatAnimationSeen=true — combat ongoing, returning');
             rmaLog('[RMADBG] === TICK END (combat ongoing) ===');
+            scheduleNextFightTick();
             return;
         }
 
@@ -237,6 +286,7 @@ setInterval(async () => {
             if (elapsed < STUCK_TIMEOUT) {
                 rmaLog('[RMADBG] elapsed < STUCK_TIMEOUT — waiting');
                 rmaLog('[RMADBG] === TICK END (waiting for animation) ===');
+                scheduleNextFightTick();
                 return;
             }
             rmaLog(`[RMA Fight] STUCK: no animation after ${elapsed}ms — retrying`);
@@ -251,6 +301,7 @@ setInterval(async () => {
             } else {
                 rmaLog('[RMADBG] DOM wait will handle this, returning');
                 rmaLog('[RMADBG] === TICK END (defer to DOM wait) ===');
+                scheduleNextFightTick();
                 return;
             }
         }
@@ -278,11 +329,13 @@ setInterval(async () => {
     if (setTargetRunning) {
         rmaLog('[RMADBG] GATE: set_target timer running — returning');
         rmaLog('[RMADBG] === TICK END (set_target) ===');
+        scheduleNextFightTick();
         return;
     }
     if (moving && lastAttackDispatchTime === 0) {
         rmaLog('[RMADBG] GATE: movement in progress — returning');
         rmaLog('[RMADBG] === TICK END (moving) ===');
+        scheduleNextFightTick();
         return;
     }
 
@@ -307,7 +360,21 @@ setInterval(async () => {
     } finally {
         fightLoopRunning = false;
     }
-    rmaLog('[RMADBG] === TICK END (after dispatch) ===');
-}, 1000);
+    rmaLog('[RMADBG] === TICK END (after dispatch, dispatched=' + (combatDomWaitStart > 0) + ') ===');
+    if (combatDomWaitStart > 0) {
+        scheduleNextFightTick(RMA_CONFIG.ATTACK_RETRY_INTERVAL || 5000);
+    } else {
+        scheduleNextFightTick();
+    }
+};
+
+const scheduleNextFightTick = (overrideDelay) => {
+    if (fightTickTimer) clearTimeout(fightTickTimer);
+    const interval = overrideDelay || RMA_CONFIG.FIGHT_TICK_INTERVAL || 1000;
+    fightTickTimer = setTimeout(fightTick, interval);
+};
+window.scheduleNextFightTick = scheduleNextFightTick;
+
+scheduleNextFightTick();
 
 
