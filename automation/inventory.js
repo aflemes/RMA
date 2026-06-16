@@ -32,7 +32,7 @@ window.refreshLootDropsList = () => {
 
     const desc = document.createElement('div');
     desc.className = 'loot-desc';
-    desc.innerHTML = '<span class="loot-desc-marked">&#10003; Kept</span> — marked items are <b>kept</b> in inventory. Unmarked items will be <b>auto-destroyed</b> during combat.';
+    desc.innerHTML = '<span class="loot-desc-marked">&#10003; Kept</span> — marked items are <b>kept</b>. Unmarked items are <b>auto-destroyed</b> after each kill.';
     container.appendChild(desc);
 
     const inventory = players[0].temp.inventory;
@@ -73,48 +73,26 @@ const executeDestroyItems = (itemsToDestroy) => {
     for (const item of itemsToDestroy) {
         if (seenIds.has(item.id)) continue;
         seenIds.add(item.id);
-        rmaLog('[RMA Loot] Auto-destroy', getItemName(item.id), '- id:', item.id);
+        rmaLog('[RMA Loot] Destroying', getItemName(item.id), '- id:', item.id);
         Socket.send("inventory_destroy", { item_id: item.id, all: true });
     }
 };
 
-let autoDestroyTimer = null;
-
-window.scheduleNextAutoDestroy = () => {
-    if (autoDestroyTimer) {
-        clearTimeout(autoDestroyTimer);
-        autoDestroyTimer = null;
-    }
-    if (!RMA_CONFIG.AUTO_DESTROY_ENABLED) {
-        rmaLog('[RMA Loot] Auto-destroy disabled');
-        return;
-    }
-    const interval = (RMA_CONFIG.AUTO_DESTROY_INTERVAL || 60) * 1000;
-    rmaLog('[RMA Loot] Auto-destroy scheduled every', interval / 1000, 's');
-    autoDestroyTimer = setTimeout(runAutoDestroy, interval);
-};
-
-const runAutoDestroy = () => {
-    if (!RMA_CONFIG.AUTO_DESTROY_ENABLED) {
-        autoDestroyTimer = null;
-        return;
-    }
-    if (state.target && rmaDropIds.size > 0) {
-        rmaLog('[RMA Loot] Auto-destroy cycle: checking inventory for', rmaDropIds.size, 'item types');
-        const inventory = players[0].temp.inventory;
-        const toDestroy = [];
-        for (let i = 0; i < inventory.length; i++) {
-            const item = inventory[i];
-            if (item && !item.selected && rmaDropIds.has(item.id) && !rmaKeepIds.has(item.id)) {
-                toDestroy.push(item);
-            }
-        }
-        if (toDestroy.length > 0) {
-            rmaLog('[RMA Loot] Auto-destroy:', toDestroy.length, 'items found');
-            executeDestroyItems(toDestroy);
+window.executeAutoDestroy = () => {
+    if (!RMA_CONFIG.AUTO_DESTROY_ENABLED) return 0;
+    if (!rmaDropIds.size) return 0;
+    const inventory = players[0].temp.inventory;
+    const toDestroy = [];
+    for (let i = 0; i < inventory.length; i++) {
+        const item = inventory[i];
+        if (item && !item.selected && rmaDropIds.has(item.id) && !rmaKeepIds.has(item.id)) {
+            toDestroy.push(item);
         }
     }
-    window.scheduleNextAutoDestroy();
+    if (toDestroy.length === 0) return 0;
+    rmaLog('[RMA Loot] Auto-destroy:', toDestroy.length, 'items after kill');
+    executeDestroyItems(toDestroy);
+    return toDestroy.length;
 };
 
-window.scheduleNextAutoDestroy();
+window.scheduleNextAutoDestroy = () => {};

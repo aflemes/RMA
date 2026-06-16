@@ -1,11 +1,14 @@
 {
     "name": "RPG MO Assistant",
     "description": "RPG MO tools",
-    "version": "1.0",
+    "version": "1.1.12",
     "manifest_version": 3,
     "background": {
         "service_worker": "background.js"
     },
+    "host_permissions": [
+        "https://api.nopecha.com/*"
+    ],
     "permissions": [
         "storage",
         "activeTab",
@@ -45,6 +48,7 @@
                 "automation/inventory.js",
                 "menu.html", 
                 "captcha-notifier.js", 
+                "img/rma-logo.png",
                 "img/notification.png",
                 "img/target.png",
                 "img/icon16.png",

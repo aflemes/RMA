@@ -142,6 +142,12 @@ button.with-horizontal-margin {
     padding-right: 12px;
 }
 
+.settings-value {
+    color: #c3d7ac;
+    font-size: 13px;
+    font-weight: bold;
+}
+
 .settings-group input[type="number"] {
     width: 70px;
     padding: 5px 8px;
@@ -238,8 +244,15 @@ button.with-horizontal-margin {
     display: block;
 }
 
+#rma-version-header {
+    color: #888;
+    font-size: 9px;
+    margin-left: 8px;
+    letter-spacing: 0.5px;
+}
+
 #rma-logo {
-    width: 150px;
+    width: 120px;
 }
 
 .main-section {

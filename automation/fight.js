@@ -38,6 +38,25 @@ document.getElementById('rma').addEventListener('click', (e) => {
     }
 });
 
+const addCardDrops = (card) => {
+    if (!card || !card.dataset.drops) return;
+    const drops = JSON.parse(card.dataset.drops);
+    if (drops.length === 0) return;
+
+    let added = 0;
+    for (const drop of drops) {
+        if (!rmaDropIds.has(drop.id)) {
+            rmaDropIds.add(drop.id);
+            rmaKeepIds.add(drop.id);
+            rmaDropChances.set(drop.id, drop.chance);
+            added++;
+        }
+    }
+    const name = card.querySelector('.name')?.textContent || 'unknown';
+    rmaLog('[RMA Fight] Added', added, 'new drops from', name, '- total:', rmaDropIds.size);
+    if (typeof window.refreshLootDropsList === 'function') window.refreshLootDropsList();
+};
+
 const buildReachableEnnemiesList = (uniqueEnemies) => {
     const enemies = document.querySelector('#enemies');
 
@@ -47,6 +66,11 @@ const buildReachableEnnemiesList = (uniqueEnemies) => {
         const newCard = document.createElement('div');
         newCard.classList.add('enemyCard');
         newCard.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;"><span class="name">${enemy.name}</span><button class="drops-btn" style="width:auto;padding:2px 8px;font-size:11px;">Drops</button></div>`;
+
+        const drops = (enemy.params && enemy.params.drops) || [];
+        newCard.dataset.drops = JSON.stringify(
+            drops.filter(d => d.id).map(d => ({ id: d.id, chance: d.chance ?? 0 }))
+        );
 
         newCard.addEventListener('click', (e) => {
             if (e.target.closest('.drops-btn')) return;
@@ -61,74 +85,95 @@ const buildReachableEnnemiesList = (uniqueEnemies) => {
                 }
                 state.target = enemy;
                 newCard.classList.add('active');
+                addCardDrops(newCard);
             }
         });
 
         newCard.querySelector('.drops-btn').addEventListener('click', (e) => {
             e.stopPropagation();
-            const drops = enemy.params && enemy.params.drops;
-            if (drops && drops.length > 0) {
-                rmaLog('[RMA Fight] Loading', drops.length, 'drops from', enemy.name);
-                rmaDropIds.clear();
-                rmaKeepIds.clear();
-                rmaDropChances.clear();
-                for (const drop of drops) {
-                    if (drop.id) {
-                        rmaDropIds.add(drop.id);
-                        rmaKeepIds.add(drop.id);
-                        rmaDropChances.set(drop.id, drop.chance ?? 0);
-                    }
-                }
-                if (typeof window.refreshLootDropsList === 'function') window.refreshLootDropsList();
-                const tabBtn = document.querySelector('.rma-tab[data-tab="drops"]');
-                if (tabBtn) tabBtn.click();
-            } else {
-                rmaLog('[RMA Fight] No drops found for', enemy.name);
-            }
+            const tabBtn = document.querySelector('.rma-tab[data-tab="drops"]');
+            if (tabBtn) tabBtn.click();
         });
 
         enemies.appendChild(newCard);
     }
 }
 
+const findTargetDirectly = (name) => {
+    for (let i = 0; i < map_size_x; i++) {
+        for (let j = 0; j < map_size_y; j++) {
+            if (on_map[current_map][i] && on_map[current_map][i][j]) {
+                const tileId = on_map[current_map][i][j].id;
+                const obj = objects_data[tileId];
+                if (obj && obj.name === name) {
+                    return { ...obj, i, j, _direct: true };
+                }
+            }
+        }
+    }
+    return null;
+};
+
 const executeAttack = async () => {
-    const { path: pathToTarget, item: closestTarget } = findClosestReachableObject(obj => obj?.name === state.target.name);
+    let result = findClosestReachableObject(obj => obj?.name === state.target.name);
+    let closestTarget = result?.item;
+    let pathToTarget = result?.path;
 
     if (!closestTarget) {
-        rmaLog('[RMA Fight] executeAttack: no reachable target found for', state.target?.name);
-        return false;
+        rmaLog('[RMA Fight] executeAttack: findClosestReachableObject failed, trying direct lookup');
+        closestTarget = findTargetDirectly(state.target.name);
+        if (!closestTarget) {
+            rmaLog('[RMA Fight] executeAttack: target not found on map for', state.target?.name);
+            return false;
+        }
+        rmaLog('[RMA Fight] executeAttack: found target directly at', `(${closestTarget.i},${closestTarget.j})`);
     }
 
-    rmaLog('[RMA Fight] executeAttack: moving to', closestTarget.name, `@ (${closestTarget.i}, ${closestTarget.j})`);
-    players[0].path = pathToTarget;
+    let dist = Math.abs(players[0].i - closestTarget.i) + Math.abs(players[0].j - closestTarget.j);
+    rmaLog('[RMA Fight] executeAttack: target', closestTarget.name, `@ (${closestTarget.i},${closestTarget.j})`, 'dist=' + dist);
 
-    const moved = await waitUntil(
-        () => !movementInProgress(players[0]) && !Timers.running("set_target"),
-        1500,
-        10000
-    ).then(() => true).catch(() => {
-        rmaLog('[RMA Fight] executeAttack: waitUntil timed out — player may still be moving');
-        return false;
-    });
-
-    rmaLog('[RMA Fight] executeAttack: movement settled =', moved,
-        '| still moving =', movementInProgress(players[0]),
-        '| set_target timer =', Timers.running("set_target"));
-
-    if (!moved) {
-        rmaLog('[RMA Fight] executeAttack: movement did not settle — target too far, aborting');
-        return false;
-    }
-
-    if (!state.target) {
-        rmaLog('[RMA Fight] executeAttack: target was cleared during movement, aborting');
-        return false;
-    }
-
-    const dist = Math.abs(players[0].i - closestTarget.i) + Math.abs(players[0].j - closestTarget.j);
+    // Only move if not already in attack range
     if (dist > 2) {
-        rmaLog('[RMA Fight] executeAttack: target too far (dist=' + dist + '), aborting');
-        return false;
+        rmaLog('[RMA Fight] executeAttack: moving closer');
+        if (!pathToTarget || pathToTarget.length === 0) {
+            pathToTarget = findPathFromTo(players[0], { i: closestTarget.i, j: closestTarget.j }, players[0]);
+        }
+        if (!pathToTarget || pathToTarget.length === 0) {
+            rmaLog('[RMA Fight] executeAttack: no path to target');
+            return false;
+        }
+        players[0].path = pathToTarget;
+
+        const moved = await waitUntil(
+            () => !movementInProgress(players[0]) && !Timers.running("set_target"),
+            1500,
+            10000
+        ).then(() => true).catch(() => {
+            rmaLog('[RMA Fight] executeAttack: waitUntil timed out — player may still be moving');
+            return false;
+        });
+
+        rmaLog('[RMA Fight] executeAttack: movement settled =', moved,
+            '| still moving =', movementInProgress(players[0]),
+            '| set_target timer =', Timers.running("set_target"));
+
+        if (!moved) {
+            rmaLog('[RMA Fight] executeAttack: movement did not settle — aborting');
+            return false;
+        }
+
+        if (!state.target) {
+            rmaLog('[RMA Fight] executeAttack: target was cleared during movement, aborting');
+            return false;
+        }
+
+        dist = Math.abs(players[0].i - closestTarget.i) + Math.abs(players[0].j - closestTarget.j);
+        if (dist > 2) {
+            rmaLog('[RMA Fight] executeAttack: target too far after move (dist=' + dist + '), aborting');
+            return false;
+        }
+    } else {
+        rmaLog('[RMA Fight] executeAttack: already in range, skipping movement');
     }
 
     await sleep(getRandomInt(RMA_CONFIG.FIGHT_DELAY_MIN, RMA_CONFIG.FIGHT_DELAY_MAX));
@@ -157,6 +202,8 @@ let combatDomWaitStart = 0;
 let combatEndTime = 0;
 const STUCK_TIMEOUT = 3000;
 let fightTickTimer = null;
+let fightLowHealthRetryCount = 0;
+const MAX_FIGHT_HEALTH_RETRIES = 3;
 
 const getTargetEntity = () => {
     const tid = players[0].temp.target_id;
@@ -167,10 +214,182 @@ const getTargetEntity = () => {
     return null;
 };
 
+let captchaActive = false;
+let captchaSolving = false;
+
+const checkCaptcha = () => {
+    const form = document.querySelector('#captcha_form');
+    const display = form ? form.style.display : 'no-form';
+    const offsetP = form ? form.offsetParent : null;
+    const visible = form && display !== 'none' && offsetP !== null;
+    if (visible && !captchaActive) {
+        captchaActive = true;
+        captchaSolving = false;
+        console.log('[RMA Captcha] Captcha detected');
+    } else if (!visible && captchaActive) {
+        captchaActive = false;
+        captchaSolving = false;
+        console.log('[RMA Captcha] Captcha cleared');
+    }
+    return visible;
+};
+
+const getCaptchaImageUrl = () => {
+    const div = document.querySelector('#captcha_img_div');
+    if (!div) { console.log('[RMA Captcha] #captcha_img_div not found'); return null; }
+    const bg = div.style.backgroundImage;
+    if (!bg) { console.log('[RMA Captcha] No background-image on captcha div'); return null; }
+    const url = bg.replace(/^url\(["']?/, '').replace(/["']?\)$/, '');
+    console.log('[RMA Captcha] Image URL length:', url.length);
+    return url;
+};
+
+const solveCaptcha = async () => {
+    const imageUrl = getCaptchaImageUrl();
+    if (!imageUrl) return null;
+
+    console.log('[RMA NopeCHA] Submitting captcha image...');
+
+    try {
+        const result = await sendNopechaRequest({ imageUrl });
+        console.log('[RMA NopeCHA] Solution received:', JSON.stringify(result));
+        return result;
+    } catch (e) {
+        console.log('[RMA NopeCHA] Error:', e);
+        return null;
+    }
+};
+
+const closeCaptchaBonusForm = () => {
+    const check = () => {
+        const form = document.getElementById('captcha_bonus_assign_form');
+        if (form && form.style.display !== 'none') {
+            form.style.display = 'none';
+            console.log('[RMA Captcha] Closed bonus form');
+        }
+    };
+    check();
+    for (let i = 0; i < 10; i++) setTimeout(check, (i + 1) * 500);
+};
+
+const tryAutoSolveCaptcha = async () => {
+    if (captchaSolving) {
+        console.log('[RMA Captcha] Already solving, skipping');
+        return;
+    }
+
+    captchaSolving = true;
+    console.log('[RMA Captcha] Starting auto-solve...');
+
+    let attempts = 0;
+    const MAX_PER_IMAGE = 3;
+
+    try {
+        while (captchaActive) {
+            const solution = await solveCaptcha();
+
+            if (!solution) {
+                console.log('[RMA Captcha] No solution obtained, will retry');
+                await sleep(2000);
+                attempts++;
+                if (attempts >= MAX_PER_IMAGE) {
+                    Captcha.refresh();
+                    console.log('[RMA Captcha] Refreshed captcha image');
+                    attempts = 0;
+                    await sleep(2000);
+                }
+                continue;
+            }
+
+            const input = document.querySelector('#captcha_input');
+            if (!input) {
+                console.log('[RMA Captcha] #captcha_input not found, aborting');
+                break;
+            }
+
+            input.value = solution;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            console.log('[RMA Captcha] Filled input with:', solution);
+
+            await sleep(500);
+
+            if (typeof Captcha !== 'undefined' && Captcha.submit) {
+                Captcha.submit();
+                console.log('[RMA Captcha] Captcha submitted');
+            } else {
+                console.log('[RMA Captcha] Captcha.submit not available');
+                break;
+            }
+
+            await sleep(1500);
+
+            if (!captchaActive) {
+                console.log('[RMA Captcha] Captcha solved');
+                closeCaptchaBonusForm();
+                break;
+            }
+
+            attempts++;
+            console.log('[RMA Captcha] Attempt', attempts, 'failed');
+
+            if (attempts >= MAX_PER_IMAGE) {
+                if (typeof Captcha !== 'undefined' && Captcha.refresh) {
+                    Captcha.refresh();
+                    console.log('[RMA Captcha] Refreshed captcha image');
+                }
+                attempts = 0;
+                await sleep(2000);
+            }
+        }
+    } catch (e) {
+        console.log('[RMA Captcha] Error in tryAutoSolveCaptcha:', e);
+    } finally {
+        captchaSolving = false;
+    }
+};
+
 const fightTick = async () => {
     rmaLog('[RMADBG] === TICK START ===');
+    if (checkCaptcha()) {
+        if (!captchaSolving) {
+            tryAutoSolveCaptcha();
+        }
+        scheduleNextFightTick(5000);
+        return;
+    }
     if (fightLoopRunning) { rmaLog('[RMADBG] GATE: fightLoopRunning'); scheduleNextFightTick(); return; };
     if (currentHealthPercentage <= RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD) { rmaLog('[RMADBG] GATE: health too low'); scheduleNextFightTick(); return; };
+
+    // Pre-combat health check (only when auto-attack is active)
+    if ((state.target || state.nearbyMode) && typeof players !== 'undefined' && players && players[0] && players[0].temp && players[0].temp.target_id === -1 && !movementInProgress(players[0])) {
+        const foodThreshold = RMA_CONFIG.FOOD_HEAL_THRESHOLD || 0;
+        if (foodThreshold > 0 && currentHealthPercentage < foodThreshold) {
+            if (!hasHealthItem()) {
+                fightLowHealthRetryCount++;
+                rmaLog('[RMA Fight] Low health (' + currentHealthPercentage.toFixed(1) + '%) and no food — attempt ' + fightLowHealthRetryCount + '/' + MAX_FIGHT_HEALTH_RETRIES);
+                if (fightLowHealthRetryCount < MAX_FIGHT_HEALTH_RETRIES) {
+                    rmaLog('[RMADBG] === TICK END (healing retry) ===');
+                    scheduleNextFightTick();
+                    return;
+                }
+                rmaLog('[RMA Fight] No food after ' + MAX_FIGHT_HEALTH_RETRIES + ' attempts — logging out');
+                fightLoopRunning = true;
+                if (fightTickTimer) { clearTimeout(fightTickTimer); fightTickTimer = null; }
+                const logoutEl = document.getElementById('logout_link');
+                if (logoutEl) logoutEl.click();
+                return;
+            }
+            fightLowHealthRetryCount = 0;
+            rmaLog('[RMADBG] Health ' + currentHealthPercentage + '% < ' + foodThreshold + '% — eating food');
+            if (typeof Player !== 'undefined' && Player.eat_food) {
+                Player.eat_food();
+            }
+            rmaLog('[RMADBG] === TICK END (healing) ===');
+            scheduleNextFightTick();
+            return;
+        }
+    }
+    fightLowHealthRetryCount = 0;
 
     // Nearby mode: auto-find closest enemy when no target
     if (!state.target) {
@@ -210,6 +429,22 @@ const fightTick = async () => {
     if (combatEndTime > 0) {
         const foodThreshold = RMA_CONFIG.FOOD_HEAL_THRESHOLD || 0;
         if (foodThreshold > 0 && currentHealthPercentage < foodThreshold) {
+            if (!hasHealthItem()) {
+                fightLowHealthRetryCount++;
+                rmaLog('[RMA Fight] Low health (' + currentHealthPercentage.toFixed(1) + '%) and no food — attempt ' + fightLowHealthRetryCount + '/' + MAX_FIGHT_HEALTH_RETRIES);
+                if (fightLowHealthRetryCount < MAX_FIGHT_HEALTH_RETRIES) {
+                    rmaLog('[RMADBG] === TICK END (healing retry) ===');
+                    scheduleNextFightTick();
+                    return;
+                }
+                rmaLog('[RMA Fight] No food after ' + MAX_FIGHT_HEALTH_RETRIES + ' attempts — logging out');
+                fightLoopRunning = true;
+                if (fightTickTimer) { clearTimeout(fightTickTimer); fightTickTimer = null; }
+                const logoutEl = document.getElementById('logout_link');
+                if (logoutEl) logoutEl.click();
+                return;
+            }
+            fightLowHealthRetryCount = 0;
             rmaLog('[RMADBG] Health ' + currentHealthPercentage + '% < ' + foodThreshold + '% — eating food');
             if (typeof Player !== 'undefined' && Player.eat_food) {
                 Player.eat_food();
@@ -312,10 +547,18 @@ const fightTick = async () => {
             combatEndTime = Date.now();
             const foodThreshold = RMA_CONFIG.FOOD_HEAL_THRESHOLD || 0;
             if (foodThreshold > 0 && currentHealthPercentage < foodThreshold) {
-                rmaLog('[RMA Fight] Health ' + currentHealthPercentage + '% < ' + foodThreshold + '% — eating food');
-                if (typeof Player !== 'undefined' && Player.eat_food) {
-                    Player.eat_food();
+                if (hasHealthItem()) {
+                    rmaLog('[RMA Fight] Health ' + currentHealthPercentage + '% < ' + foodThreshold + '% — eating food');
+                    if (typeof Player !== 'undefined' && Player.eat_food) {
+                        Player.eat_food();
+                    }
+                } else {
+                    rmaLog('[RMA Fight] Health low but no food available');
                 }
+            }
+            if (typeof window.executeAutoDestroy === 'function') {
+                const destroyed = window.executeAutoDestroy();
+                if (destroyed > 0) rmaLog('[RMA Loot] Destroyed', destroyed, 'items after kill');
             }
             if (state.nearbyMode) {
                 state.target = null;

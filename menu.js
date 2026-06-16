@@ -36,15 +36,11 @@ let rma = new Reef('#rma', {
                         <div class="sub-section">Drops — click Drops on a monster in FIGHT</div>
                         <div id="loot-drops-list"></div>
                         <div class="settings-group" style="margin-top:12px;">
-                            <span class="settings-label">Auto-destroy while fighting</span>
+                            <span class="settings-label">Auto-destroy after each kill</span>
                             <label class="rma-toggle-switch">
                                 <input type="checkbox" id="auto-destroy-enabled" ${typeof RMA_CONFIG !== 'undefined' && RMA_CONFIG.AUTO_DESTROY_ENABLED ? 'checked' : ''} />
                                 <span class="rma-toggle-slider"></span>
                             </label>
-                        </div>
-                        <div class="settings-group">
-                            <span class="settings-label">Destroy interval (s)</span>
-                            <input type="number" id="auto-destroy-interval" min="10" step="5" value="${typeof RMA_CONFIG !== 'undefined' ? RMA_CONFIG.AUTO_DESTROY_INTERVAL : 60}" />
                         </div>
                     </div>
                 </div>
@@ -84,6 +80,11 @@ let rma = new Reef('#rma', {
                                 <span class="rma-toggle-slider"></span>
                             </label>
                         </div>
+                        <div class="settings-group">
+                            <span class="settings-label">NopeCHA credits</span>
+                            <span id="rma-nopecha-credits" class="settings-value">...</span>
+                        </div>
+
                     </div>
                 </div>
             </div>
@@ -102,6 +103,20 @@ let rma = new Reef('#rma', {
  */
 
 rma.render();
+
+const verEl = document.getElementById('rma-version-header');
+if (verEl && typeof RMA_CONFIG !== 'undefined') verEl.textContent = 'v' + RMA_CONFIG.RMA_BUILD_VERSION;
+
+if (typeof fetchNopechaStatus === 'function') {
+    fetchNopechaStatus().then(data => {
+        const el = document.getElementById('rma-nopecha-credits');
+        if (el) {
+            el.textContent = data && data.credit !== undefined ? data.credit + '/' + data.quota : 'N/A';
+        }
+    }).catch(() => {});
+}
+
+
 
 // Toggle panel collapsed/expanded
 document.getElementById('rma-header').addEventListener('click', (e) => {
@@ -161,6 +176,22 @@ document.getElementById('rma').addEventListener('click', (e) => {
     tabBtn.classList.add('active');
     const content = document.querySelector(`[data-tab-content="${tab}"]`);
     if (content) content.classList.add('active');
+
+    if (tab === 'settings' && typeof fetchNopechaStatus === 'function') {
+        fetchNopechaStatus().then(data => {
+            const el = document.getElementById('rma-nopecha-credits');
+            if (el) {
+                if (data && data.credit !== undefined) {
+                    el.textContent = data.credit + '/' + data.quota;
+                } else {
+                    el.textContent = 'N/A';
+                }
+            }
+        }).catch(() => {
+            const el = document.getElementById('rma-nopecha-credits');
+            if (el) el.textContent = 'N/A';
+        });
+    }
 });
 
 // Settings inputs — event delegation since Reef re-renders content
@@ -201,15 +232,8 @@ document.getElementById('rma').addEventListener('change', (e) => {
     }
     if (e.target.id === 'auto-destroy-enabled') {
         RMA_CONFIG.AUTO_DESTROY_ENABLED = e.target.checked;
-        if (typeof window.scheduleNextAutoDestroy === 'function') window.scheduleNextAutoDestroy();
     }
-    if (e.target.id === 'auto-destroy-interval') {
-        const val = parseInt(e.target.value, 10);
-        if (!isNaN(val) && val >= 10) {
-            RMA_CONFIG.AUTO_DESTROY_INTERVAL = val;
-            if (typeof window.scheduleNextAutoDestroy === 'function') window.scheduleNextAutoDestroy();
-        }
-    }
+
 });
 
 const addTextToScript = (text, newLine = true) => {

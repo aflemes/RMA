@@ -13,6 +13,8 @@ const RMA_CONFIG = {
     AUTO_DESTROY_ENABLED: false,
     AUTO_DESTROY_INTERVAL: 60,
     FIGHT_TICK_INTERVAL: 1000,
+    NOPECHA_API_KEY: '',
+    RMA_BUILD_VERSION: '1.1.12',
 };
 
 const STATE_BUILDER_RUNNING = 'STATE_BUILDER_RUNNING';
@@ -105,6 +107,54 @@ const download = (content, filename) => {
     passToBackground({ download: { content, filename }});
 }
 
+let nopechaReqId = 0;
+const nopechaPending = {};
+
+window.addEventListener('NopechaResponse', (evt) => {
+    const { id, error, result } = evt.detail;
+    if (nopechaPending[id]) {
+        if (error) nopechaPending[id].reject(new Error(error));
+        else nopechaPending[id].resolve(result);
+        delete nopechaPending[id];
+    }
+});
+
+const sendNopechaRequest = (data) => new Promise((resolve, reject) => {
+    const id = ++nopechaReqId;
+    nopechaPending[id] = { resolve, reject };
+    setTimeout(() => {
+        if (nopechaPending[id]) {
+            nopechaPending[id].reject(new Error('NopeCHA request timeout'));
+            delete nopechaPending[id];
+        }
+    }, 120000);
+    window.dispatchEvent(new CustomEvent('NopechaRequest', {
+        detail: { id, apiKey: RMA_CONFIG.NOPECHA_API_KEY, ...data }
+    }));
+});
+
+let nopechaStatusPending = null;
+
+window.addEventListener('NopechaStatusResponse', (evt) => {
+    if (nopechaStatusPending) {
+        nopechaStatusPending.resolve(evt.detail);
+        nopechaStatusPending = null;
+    }
+});
+
+const fetchNopechaStatus = () => new Promise((resolve, reject) => {
+    nopechaStatusPending = { resolve, reject };
+    window.dispatchEvent(new CustomEvent('NopechaStatusRequest', {
+        detail: { apiKey: RMA_CONFIG.NOPECHA_API_KEY }
+    }));
+    setTimeout(() => {
+        if (nopechaStatusPending) {
+            nopechaStatusPending.reject(new Error('Status request timeout'));
+            nopechaStatusPending = null;
+        }
+    }, 10000);
+});
+
 /**
  * ===========================
  *  RPG MO specific functions
@@ -153,7 +203,7 @@ const findClosest = (items) => {
     let closestItem;
 
     for (const item of items) {
-        if (!item?.i || !item?.j) {
+        if (item?.i === undefined || item?.j === undefined) {
             continue;
         }
 
