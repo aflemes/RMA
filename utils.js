@@ -14,7 +14,7 @@ const RMA_CONFIG = {
     AUTO_DESTROY_INTERVAL: 60,
     FIGHT_TICK_INTERVAL: 1000,
     NOPECHA_API_KEY: '',
-    RMA_BUILD_VERSION: '1.1.12',
+    RMA_BUILD_VERSION: '1.1.27',
 };
 
 const STATE_BUILDER_RUNNING = 'STATE_BUILDER_RUNNING';
@@ -32,6 +32,7 @@ const DEFAULT_FARMING_STATE = {
 
 let state = {
     target: null,
+    targetNames: new Set(),
     nearbyMode: false,
     farming: { ...DEFAULT_FARMING_STATE }
 };
@@ -109,12 +110,20 @@ const download = (content, filename) => {
 
 let nopechaReqId = 0;
 const nopechaPending = {};
+let nopechaBanned = false;
 
 window.addEventListener('NopechaResponse', (evt) => {
     const { id, error, result } = evt.detail;
     if (nopechaPending[id]) {
-        if (error) nopechaPending[id].reject(new Error(error));
-        else nopechaPending[id].resolve(result);
+        if (error) {
+            if (typeof error === 'string' && error.includes('Banned IP')) {
+                nopechaBanned = true;
+                console.log('[RMA NopeCHA] IP banned / daily limit reached');
+            }
+            nopechaPending[id].reject(new Error(error));
+        } else {
+            nopechaPending[id].resolve(result);
+        }
         delete nopechaPending[id];
     }
 });
@@ -171,7 +180,7 @@ const findReachableObjects = (filterCallback = (obj) => obj.activities && obj.ac
     const reachables = [];
 
     for (var i = 0; map_size_x > i; i++) for (var j = 0; map_size_y > j; j++) {
-        if (on_map[current_map][i] && on_map[current_map][i][j]) {
+        if (on_map[current_map] && on_map[current_map][i] && on_map[current_map][i][j]) {
             var tileId = on_map[current_map][i][j].id;
             var obj = objects_data[tileId];
             if (!obj) {
@@ -180,7 +189,9 @@ const findReachableObjects = (filterCallback = (obj) => obj.activities && obj.ac
 
             const pathTo = findPathFromTo(players[0], { i, j }, players[0]);
 
-            if (pathTo.length === 0) {
+            const dist = Math.abs(players[0].i - i) + Math.abs(players[0].j - j);
+
+            if (pathTo.length === 0 && dist > 2) {
                 continue;
             }
 

@@ -17,6 +17,18 @@ const FOOD_ITEMS = {
 };
 
 // Use event delegation on #rma so the listener survives Reef re-renders
+const runFromFight = () => {
+    rmaLog('[RMA Fight] Running from fight...');
+    if (typeof Socket !== 'undefined' && Socket.send) {
+        Socket.send("run_from_fight", {});
+    }
+    state.target = null;
+    if (typeof Archery !== 'undefined' && Archery.force_stop_shooting) {
+        Archery.force_stop_shooting();
+    }
+    rmaLog('[RMA Fight] Combat stopped');
+};
+
 document.getElementById('rma').addEventListener('click', (e) => {
     if (e.target.closest('#fight .start')) {
         const reachableTargets = findReachableObjects((obj) => obj?.activities.includes("Attack"));
@@ -25,11 +37,26 @@ document.getElementById('rma').addEventListener('click', (e) => {
             return acc;
         }, []);
         buildReachableEnnemiesList(uniqueEnemies);
+
+        const nonAttackMonsters = findReachableObjects(obj =>
+            obj?.params?.hp && !obj.activities?.includes('Attack')
+        );
+        if (nonAttackMonsters.length > 0) {
+            const unique = nonAttackMonsters.filter((o, i, a) => a.findIndex(x => x.name === o.name) === i);
+            rmaLog('[RMA DEBUG] Monsters WITHOUT Attack activity:', unique.map(o => ({ name: o.name, activities: o.activities, hp: o.params?.hp, level: o.params?.level })));
+        }
     }
     if (e.target.closest('.nearby-toggle')) {
         state.nearbyMode = !state.nearbyMode;
         if (state.nearbyMode) {
             state.target = null;
+            state.targetNames.clear();
+            document.querySelectorAll('.enemyCard.active').forEach(c => c.classList.remove('active'));
+            if (!homePosition) {
+                homePosition = { i: players[0].i, j: players[0].j };
+                rmaLog('[RMA Fight] Home position set at (' + homePosition.i + ',' + homePosition.j + ')');
+            }
+            returningToHome = false;
             rmaLog('[RMA Fight] Nearby mode ON — will auto-target closest enemy');
         } else {
             rmaLog('[RMA Fight] Nearby mode OFF');
@@ -38,22 +65,20 @@ document.getElementById('rma').addEventListener('click', (e) => {
     }
 });
 
-const addCardDrops = (card) => {
-    if (!card || !card.dataset.drops) return;
-    const drops = JSON.parse(card.dataset.drops);
-    if (drops.length === 0) return;
-
-    let added = 0;
-    for (const drop of drops) {
-        if (!rmaDropIds.has(drop.id)) {
+const rebuildDropsFromSelected = () => {
+    rmaDropIds.clear();
+    rmaKeepIds.clear();
+    rmaDropChances.clear();
+    document.querySelectorAll('.enemyCard.active').forEach(card => {
+        if (!card.dataset.drops) return;
+        const drops = JSON.parse(card.dataset.drops);
+        for (const drop of drops) {
             rmaDropIds.add(drop.id);
             rmaKeepIds.add(drop.id);
             rmaDropChances.set(drop.id, drop.chance);
-            added++;
         }
-    }
-    const name = card.querySelector('.name')?.textContent || 'unknown';
-    rmaLog('[RMA Fight] Added', added, 'new drops from', name, '- total:', rmaDropIds.size);
+    });
+    rmaLog('[RMA Fight] Drops rebuilt - total:', rmaDropIds.size);
     if (typeof window.refreshLootDropsList === 'function') window.refreshLootDropsList();
 };
 
@@ -75,17 +100,26 @@ const buildReachableEnnemiesList = (uniqueEnemies) => {
         newCard.addEventListener('click', (e) => {
             if (e.target.closest('.drops-btn')) return;
             if (newCard.classList.contains('active')) {
-                state.target = null;
+                state.targetNames.delete(enemy.name);
+                if (state.target && state.target.name === enemy.name) {
+                    state.target = null;
+                }
                 newCard.classList.remove('active');
+                rebuildDropsFromSelected();
             } else {
                 if (state.nearbyMode) {
                     state.nearbyMode = false;
                     const nearbyBtn = document.querySelector('.nearby-toggle');
                     if (nearbyBtn) nearbyBtn.classList.remove('active');
                 }
-                state.target = enemy;
+                if (!homePosition) {
+                    homePosition = { i: players[0].i, j: players[0].j };
+                    rmaLog('[RMA Fight] Home position set at (' + homePosition.i + ',' + homePosition.j + ')');
+                }
+                returningToHome = false;
+                state.targetNames.add(enemy.name);
                 newCard.classList.add('active');
-                addCardDrops(newCard);
+                rebuildDropsFromSelected();
             }
         });
 
@@ -98,6 +132,32 @@ const buildReachableEnnemiesList = (uniqueEnemies) => {
         enemies.appendChild(newCard);
     }
 }
+
+window.rmaDebugMap = (radius = 15) => {
+    const px = players[0].i, py = players[0].j;
+    const results = [];
+    for (let i = Math.max(0, px - radius); i < Math.min(map_size_x, px + radius); i++) {
+        for (let j = Math.max(0, py - radius); j < Math.min(map_size_y, py + radius); j++) {
+            if (on_map[current_map][i] && on_map[current_map][i][j]) {
+                const tileId = on_map[current_map][i][j].id;
+                const obj = objects_data[tileId];
+                if (obj) {
+                    results.push({
+                        pos: `(${i},${j})`,
+                        tileId,
+                        name: obj.name,
+                        activities: obj.activities,
+                        hp: obj.params?.hp,
+                        level: obj.params?.level,
+                        type: obj.params?.type
+                    });
+                }
+            }
+        }
+    }
+    console.table(results);
+    return results;
+};
 
 const findTargetDirectly = (name) => {
     for (let i = 0; i < map_size_x; i++) {
@@ -205,6 +265,11 @@ let fightTickTimer = null;
 let fightLowHealthRetryCount = 0;
 const MAX_FIGHT_HEALTH_RETRIES = 3;
 
+let homePosition = null;
+let lastCombatTime = Date.now();
+let returningToHome = false;
+const IDLE_RETURN_TIMEOUT = 5000;
+
 const getTargetEntity = () => {
     const tid = players[0].temp.target_id;
     if (tid === -1) return null;
@@ -229,6 +294,10 @@ const checkCaptcha = () => {
     } else if (!visible && captchaActive) {
         captchaActive = false;
         captchaSolving = false;
+        if (nopechaBanned) {
+            nopechaBanned = false;
+            console.log('[RMA Captcha] Captcha cleared — will retry NopeCHA next captcha');
+        }
         console.log('[RMA Captcha] Captcha cleared');
     }
     return visible;
@@ -289,6 +358,10 @@ const tryAutoSolveCaptcha = async () => {
             const solution = await solveCaptcha();
 
             if (!solution) {
+                if (typeof nopechaBanned !== 'undefined' && nopechaBanned) {
+                    console.log('[RMA Captcha] NopeCHA daily limit reached, stopping auto-solve');
+                    break;
+                }
                 console.log('[RMA Captcha] No solution obtained, will retry');
                 await sleep(2000);
                 attempts++;
@@ -351,17 +424,33 @@ const tryAutoSolveCaptcha = async () => {
 const fightTick = async () => {
     rmaLog('[RMADBG] === TICK START ===');
     if (checkCaptcha()) {
-        if (!captchaSolving) {
+        if (!captchaSolving && !nopechaBanned) {
             tryAutoSolveCaptcha();
         }
-        scheduleNextFightTick(5000);
+        scheduleNextFightTick(nopechaBanned ? 10000 : 5000);
         return;
     }
     if (fightLoopRunning) { rmaLog('[RMADBG] GATE: fightLoopRunning'); scheduleNextFightTick(); return; };
-    if (currentHealthPercentage <= RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD) { rmaLog('[RMADBG] GATE: health too low'); scheduleNextFightTick(); return; };
+    if (currentHealthPercentage <= RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD) {
+        rmaLog('[RMADBG] GATE: health too low');
+        scheduleNextFightTick();
+        return;
+    }
+    const inCombat = (typeof players !== 'undefined' && players && players[0] && players[0].temp && players[0].temp.target_id !== -1) || combatAnimationSeen || combatDomWaitStart > 0;
+    const foodThreshold = RMA_CONFIG.FOOD_HEAL_THRESHOLD || 0;
+    if (inCombat && foodThreshold > 0 && currentHealthPercentage < foodThreshold) {
+        rmaLog('[RMA Fight] Health ' + currentHealthPercentage.toFixed(1) + '% below ' + foodThreshold + '% while in combat — running from fight');
+        runFromFight();
+        combatAnimationSeen = false;
+        lastAttackDispatchTime = 0;
+        combatDomWaitStart = 0;
+        combatEndTime = 0;
+        scheduleNextFightTick(1000);
+        return;
+    }
 
     // Pre-combat health check (only when auto-attack is active)
-    if ((state.target || state.nearbyMode) && typeof players !== 'undefined' && players && players[0] && players[0].temp && players[0].temp.target_id === -1 && !movementInProgress(players[0])) {
+    if ((state.target || state.targetNames?.size > 0 || state.nearbyMode) && typeof players !== 'undefined' && players && players[0] && players[0].temp && players[0].temp.target_id === -1 && !movementInProgress(players[0])) {
         const foodThreshold = RMA_CONFIG.FOOD_HEAL_THRESHOLD || 0;
         if (foodThreshold > 0 && currentHealthPercentage < foodThreshold) {
             if (!hasHealthItem()) {
@@ -391,14 +480,77 @@ const fightTick = async () => {
     }
     fightLowHealthRetryCount = 0;
 
-    // Nearby mode: auto-find closest enemy when no target
+    // Find closest target among selected names or nearby mode
     if (!state.target) {
-        if (!state.nearbyMode) { rmaLog('[RMADBG] GATE: !state.target'); scheduleNextFightTick(); return; };
-        const nearest = findClosestReachableObject(obj => obj?.activities.includes("Attack"));
-        if (!nearest.item) { rmaLog('[RMADBG] GATE: no enemies nearby'); scheduleNextFightTick(); return; };
-        state.target = nearest.item;
-        combatEndTime = 0;
-        rmaLog('[RMA Fight] Nearby mode: targeting', state.target.name);
+        if (state.targetNames.size > 0) {
+            const closest = findClosestReachableObject(obj =>
+                obj?.activities.includes("Attack") && state.targetNames.has(obj.name)
+            );
+            if (closest.item) {
+                state.target = closest.item;
+                combatEndTime = 0;
+                rmaLog('[RMA Fight] Targeting closest selected:', state.target.name);
+            } else {
+                rmaLog('[RMADBG] GATE: none of the selected targets found nearby');
+            }
+        } else if (!state.nearbyMode) {
+            rmaLog('[RMADBG] GATE: !state.target');
+        } else {
+            const nearest = findClosestReachableObject(obj => obj?.activities.includes("Attack"));
+            if (nearest.item) {
+                state.target = nearest.item;
+                combatEndTime = 0;
+                rmaLog('[RMA Fight] Nearby mode: targeting', state.target.name);
+            } else {
+                rmaLog('[RMADBG] GATE: no enemies nearby');
+            }
+        }
+    }
+
+    // Idle return: if no target found for IDLE_RETURN_TIMEOUT ms, walk back to home
+    if (!state.target) {
+        if (!homePosition && (state.targetNames.size > 0 || state.nearbyMode)) {
+            homePosition = { i: players[0].i, j: players[0].j };
+            lastCombatTime = Date.now();
+            rmaLog('[RMA Fight] Home position auto-set at (' + homePosition.i + ',' + homePosition.j + ')');
+        }
+        if (homePosition) {
+            if (returningToHome) {
+                const distToHome = Math.abs(players[0].i - homePosition.i) + Math.abs(players[0].j - homePosition.j);
+                if (distToHome <= 2) {
+                    returningToHome = false;
+                    lastCombatTime = Date.now();
+                    rmaLog('[RMA Fight] Reached home position');
+                } else {
+                    const path = findPathFromTo(players[0], homePosition, players[0]);
+                    if (path && path.length > 0) {
+                        players[0].path = path;
+                    }
+                    scheduleNextFightTick(1000);
+                    return;
+                }
+            } else if (Date.now() - lastCombatTime >= IDLE_RETURN_TIMEOUT) {
+                returningToHome = true;
+                rmaLog('[RMA Fight] Idle ' + (Date.now() - lastCombatTime) + 'ms — returning to home');
+                const path = findPathFromTo(players[0], homePosition, players[0]);
+                if (path && path.length > 0) {
+                    players[0].path = path;
+                }
+                scheduleNextFightTick(1000);
+                return;
+            } else {
+                scheduleNextFightTick();
+                return;
+            }
+        } else {
+            scheduleNextFightTick();
+            return;
+        }
+    }
+
+    if (returningToHome) {
+        returningToHome = false;
+        rmaLog('[RMA Fight] Found target while returning home — attacking');
     }
 
     const tid = players[0].temp.target_id;
@@ -545,6 +697,7 @@ const fightTick = async () => {
         if (combatAnimationSeen) {
             rmaLog('[RMADBG] Combat just ended');
             combatEndTime = Date.now();
+            lastCombatTime = Date.now();
             const foodThreshold = RMA_CONFIG.FOOD_HEAL_THRESHOLD || 0;
             if (foodThreshold > 0 && currentHealthPercentage < foodThreshold) {
                 if (hasHealthItem()) {
@@ -560,9 +713,9 @@ const fightTick = async () => {
                 const destroyed = window.executeAutoDestroy();
                 if (destroyed > 0) rmaLog('[RMA Loot] Destroyed', destroyed, 'items after kill');
             }
-            if (state.nearbyMode) {
+            if (state.nearbyMode || state.targetNames.size > 0) {
                 state.target = null;
-                rmaLog('[RMADBG] Nearby mode: cleared target for next enemy');
+                rmaLog('[RMADBG] Cleared target for next enemy');
             }
         }
         combatAnimationSeen = false;
@@ -582,15 +735,27 @@ const fightTick = async () => {
         return;
     }
 
+    if (!state.target) {
+        rmaLog('[RMADBG] GATE: target cleared before dispatch');
+        scheduleNextFightTick();
+        return;
+    }
+
     rmaLog(`[RMA Fight] Dispatching (${lastAttackDispatchTime === 0 ? 'first attack' : 'RETRY'})`);
 
     fightLoopRunning = true;
     try {
         const dispatched = await executeAttack();
         if (dispatched) {
+            if (!homePosition) {
+                homePosition = { i: players[0].i, j: players[0].j };
+                rmaLog('[RMA Fight] Home position set at (' + homePosition.i + ',' + homePosition.j + ')');
+            }
+            lastCombatTime = Date.now();
             combatDomWaitStart = Date.now();
             lastAttackDispatchTime = Date.now();
             combatAnimationSeen = false;
+            returningToHome = false;
             rmaLog('[RMA Fight] Attack dispatched, watching for enemy_healthbar...');
         } else {
             lastAttackDispatchTime = 0;

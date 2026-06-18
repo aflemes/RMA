@@ -16,7 +16,7 @@ setInterval(() => {
 
     currentHealthPercentage = hp / maxHp * 100;
 
-    if ((state.target || state.nearbyMode) && currentHealthPercentage <= RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD && players[0].temp.target_id === -1) {
+    if ((state.target || state.targetNames?.size > 0 || state.nearbyMode) && currentHealthPercentage <= RMA_CONFIG.MIN_HEALTH_HEALING_THRESHOLD && players[0].temp.target_id === -1) {
         if (!hasHealthItem()) {
             lowHealthRetryCount++;
             console.log('[RMA Healing] Low health and no food — attempt ' + lowHealthRetryCount + '/' + MAX_LOW_HEALTH_RETRIES);

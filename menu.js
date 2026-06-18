@@ -82,7 +82,7 @@ let rma = new Reef('#rma', {
                         </div>
                         <div class="settings-group">
                             <span class="settings-label">NopeCHA credits</span>
-                            <span id="rma-nopecha-credits" class="settings-value">...</span>
+                            <span id="rma-nopecha-credits" class="settings-value">0/100</span>
                         </div>
 
                     </div>
@@ -110,8 +110,8 @@ if (verEl && typeof RMA_CONFIG !== 'undefined') verEl.textContent = 'v' + RMA_CO
 if (typeof fetchNopechaStatus === 'function') {
     fetchNopechaStatus().then(data => {
         const el = document.getElementById('rma-nopecha-credits');
-        if (el) {
-            el.textContent = data && data.credit !== undefined ? data.credit + '/' + data.quota : 'N/A';
+        if (el && data && data.credit !== undefined) {
+            el.textContent = nopechaBanned ? '0/100' : data.credit + '/' + data.quota;
         }
     }).catch(() => {});
 }
@@ -180,17 +180,10 @@ document.getElementById('rma').addEventListener('click', (e) => {
     if (tab === 'settings' && typeof fetchNopechaStatus === 'function') {
         fetchNopechaStatus().then(data => {
             const el = document.getElementById('rma-nopecha-credits');
-            if (el) {
-                if (data && data.credit !== undefined) {
-                    el.textContent = data.credit + '/' + data.quota;
-                } else {
-                    el.textContent = 'N/A';
-                }
+            if (el && data && data.credit !== undefined) {
+                el.textContent = nopechaBanned ? '0/100' : data.credit + '/' + data.quota;
             }
-        }).catch(() => {
-            const el = document.getElementById('rma-nopecha-credits');
-            if (el) el.textContent = 'N/A';
-        });
+        }).catch(() => {});
     }
 });
 
